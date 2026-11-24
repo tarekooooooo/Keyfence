@@ -416,6 +416,23 @@ def test_run_hook_refuses_input_it_cannot_read(payload):
     assert err.getvalue().startswith("keyfence blocked") and "could not read the tool call" in err.getvalue()
 
 
+@pytest.mark.parametrize("command", [
+    [sys.executable, str(ROOT / "plugin" / "hooks" / "guard.py")],
+    [sys.executable, "-m", "keyfence", "hook", "pi"],
+])
+@pytest.mark.parametrize("payload, expected, reason", [
+    (json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo 👍"}}, ensure_ascii=False).encode("utf-8"), 0, b""),
+    (json.dumps({"tool_name": "Bash", "tool_input": {"command": "cat .env && echo 👍"}}, ensure_ascii=False).encode("utf-8"), 2, b"blocked access to .env"),
+    (b"\xff\xfe not json", 2, b"could not read the tool call"),
+    ('{"tool_name":"Read"}'.encode("utf-16"), 2, b"could not read the tool call"),
+])
+def test_hook_reads_utf8_independently_of_locale(command, payload, expected, reason):
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    done = subprocess.run(command, input=payload, capture_output=True, cwd=ROOT, env=env)
+    assert done.returncode == expected
+    assert reason in done.stderr
+
+
 def test_plugin_guard_is_the_same_file_and_runs_standalone():
     guard = ROOT / "plugin" / "hooks" / "guard.py"
     assert guard.read_text() == (ROOT / "keyfence" / "hooks.py").read_text()
