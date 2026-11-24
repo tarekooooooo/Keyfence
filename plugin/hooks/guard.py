@@ -294,11 +294,15 @@ def _reason(path: str) -> str:
 
 
 def run_hook(stdin=None, stderr=None) -> int:
-    stdin = stdin or sys.stdin
     stderr = stderr or sys.stderr
     try:
         try:
-            payload = json.loads(stdin.read())
+            if stdin is None:
+                stdin = getattr(sys.stdin, "buffer", sys.stdin)
+            data = stdin.read()
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+            payload = json.loads(data)
         except ValueError:
             payload = None
         if not isinstance(payload, dict):
